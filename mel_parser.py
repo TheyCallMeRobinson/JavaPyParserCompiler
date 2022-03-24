@@ -14,14 +14,23 @@ def _make_parser():
     SEMI, COMMA = pp.Literal(';').suppress(), pp.Literal(',').suppress()
     ASSIGN = pp.Literal('=')
     MULT, ADD = pp.oneOf('* /'), pp.oneOf('+ -')
-
+    
     INPUT = pp.Keyword('input')
     OUTPUT = pp.Keyword('output')
     IF, ELSE = pp.Keyword('if').suppress(), pp.Keyword('else').suppress()
+    FOR, WHILE = pp.Keyword('for').suppress(), pp.Keyword('while').suppress()
     TRUE, FALSE = pp.Keyword('true'), pp.Keyword('false')
-
-    keywords = INPUT | OUTPUT | IF | ELSE | TRUE | FALSE
-
+    INT = pp.Keyword('int').suppress()
+    
+    keywords = INPUT | \
+               OUTPUT | \
+               IF | \
+               ELSE | \
+               WHILE | \
+               FOR | \
+               TRUE | \
+               INT
+    
     num = pp.Regex('[+-]?\\d+\\.?\\d*([eE][+-]?\\d+)?')
     str_ = pp.QuotedString('"', escChar='\\', unquoteResults=False, convertWhitespaceEscapes=False)
     literal = num | str_ | TRUE | FALSE
@@ -49,8 +58,16 @@ def _make_parser():
 
     if_ = IF + LPAR + expr + RPAR + stmt + \
         pp.Optional(ELSE + stmt)
-
-    stmt << ( input | output | assign | if_ )
+    for_ = FOR + LPAR + expr + SEMI + expr + SEMI + expr + RPAR + LBRACE + stmt + RBRACE
+    while_ = WHILE + LPAR + expr + RPAR + LBRACE + stmt + RBRACE
+    stmt << (
+        input |
+        output |
+        assign |
+        if_ |
+        for_ |
+        while_
+    )
     stmt_list = pp.ZeroOrMore(stmt)
     program = stmt_list.ignore(pp.cStyleComment).ignore(pp.dblSlashComment) + pp.StringEnd()
 

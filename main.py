@@ -4,13 +4,16 @@ import mel_parser
 
 def main():
     prog = mel_parser.parse('''
-        input a input b  /* comment 1
+        input a
+        input b  /* comment 1
         input c
         */
         c = a + b * (2 - 1) + 0  // comment 2
         output c + pow(5, 2+0, true)
 
-        if (a + 7) b = 9
+        if (a+7) b = 9
+        while (a + 10) {a = 10}
+        for (d; a+10; c) {b = 50}
     ''')
     print(*prog.tree, sep=os.linesep)
 

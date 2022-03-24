@@ -65,10 +65,42 @@ class BinOp(Enum):
     SUB = '-'
     MUL = '*'
     DIV = '/'
+    
+    
+class BoolOp(Enum):
+    GT = '>'
+    LT = '<'
+    EQ = '=='
+    GE = '>='
+    LE = '<='
+    AND = '&&'
+    OR = '||'
+
+
+class SimpleType(Enum):
+    INT = 'int'
+    DOUBLE = 'double'
+    CHAR = 'char'
+    BOOL = 'bool'
 
 
 class BinOpNode(ExprNode):
     def __init__(self, op: BinOp, arg1: ExprNode, arg2: ExprNode):
+        super().__init__()
+        self.op = op
+        self.arg1 = arg1
+        self.arg2 = arg2
+
+    @property
+    def childs(self) -> Tuple[ExprNode, ExprNode]:
+        return self.arg1, self.arg2
+
+    def __str__(self) -> str:
+        return str(self.op.value)
+
+
+class BoolOpNode(ExprNode):
+    def __init__(self, op: BoolOp, arg1: ExprNode, arg2: ExprNode):
         super().__init__()
         self.op = op
         self.arg1 = arg1
@@ -153,6 +185,56 @@ class IfNode(StmtNode):
         return 'if'
 
 
+class ForNode(StmtNode):
+    def __init__(
+        self,
+        init: ExprNode,
+        cond: ExprNode,
+        iter: ExprNode,
+        body_stmt: StmtNode
+    ):
+        super().__init__()
+        self.init = init
+        self.cond = cond
+        self.iter = iter
+        self.body_stmt = body_stmt
+
+    @property
+    def childs(self) -> Tuple[ExprNode, ExprNode, ExprNode, StmtNode]:
+        return self.init, self.cond, self.iter, self.body_stmt
+
+    def __str__(self) -> str:
+        return 'for'
+
+
+class WhileNode(StmtNode):
+    def __init__(self, cond: ExprNode, body: StmtNode):
+        super().__init__()
+        self.cond = cond
+        self.body = body
+
+    @property
+    def childs(self) -> Tuple[ExprNode, StmtNode]:
+        return self.cond, self.body
+
+    def __str__(self) -> str:
+        return 'while'
+    
+    
+# class DoWhileNode(StmtNode):
+#     def __init__(self, body: StmtNode, cond: ExprNode):
+#         super().__init__()
+#         self.body = body
+#         self.cond = cond
+#
+#     @property
+#     def childs(self) -> Tuple[StmtNode, ExprNode]:
+#         return self.body, self.cond
+#
+#     def __str__(self) -> str:
+#         return 'do while'
+
+
 class StmtListNode(AstNode):
     def __init__(self, *exprs: AstNode):
         super().__init__()
@@ -164,3 +246,5 @@ class StmtListNode(AstNode):
 
     def __str__(self) -> str:
         return '...'
+
+
