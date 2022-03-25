@@ -14,26 +14,40 @@ def _make_parser():
     SEMI, COMMA = pp.Literal(';').suppress(), pp.Literal(',').suppress()
     ASSIGN = pp.Literal('=')
     MULT, ADD = pp.oneOf('* /'), pp.oneOf('+ -')
-    
-    INPUT = pp.Keyword('input')
-    OUTPUT = pp.Keyword('output')
+
     IF, ELSE = pp.Keyword('if').suppress(), pp.Keyword('else').suppress()
     FOR, WHILE = pp.Keyword('for').suppress(), pp.Keyword('while').suppress()
     TRUE, FALSE = pp.Keyword('true'), pp.Keyword('false')
-    INT = pp.Keyword('int').suppress()
-    
-    keywords = INPUT | \
-               OUTPUT | \
-               IF | \
+    INT, DOUBLE, CHAR, FLOAT = pp.Keyword('int').suppress(), pp.Keyword('double').suppress(), \
+                               pp.Keyword('char').suppress(), pp.Keyword('float').suppress()
+    STRING, OBJECT = pp.Keyword('String').suppress(), pp.Keyword('Object').suppress()
+    INTARR, STRINGARR = pp.Keyword('int[]'), pp.Keyword('String[]').suppress()
+    CLASS = pp.Keyword('class').suppress()
+    STATIC = pp.Keyword('static').suppress()
+    PUBLIC, PRIVATE = pp.Keyword('public').suppress(), pp.Keyword('private')
+    NEW = pp.Keyword('new').suppress()
+    RETURN = pp.Keyword('return').suppress()
+
+    keywords = IF | \
                ELSE | \
                WHILE | \
                FOR | \
                TRUE | \
-               INT
-    
+               STRING | \
+               OBJECT | \
+               INTARR | \
+               STRINGARR | \
+               CLASS | \
+               STATIC | \
+               PUBLIC | \
+               PRIVATE | \
+               NEW | \
+               RETURN
+
     num = pp.Regex('[+-]?\\d+\\.?\\d*([eE][+-]?\\d+)?')
     str_ = pp.QuotedString('"', escChar='\\', unquoteResults=False, convertWhitespaceEscapes=False)
-    literal = num | str_ | TRUE | FALSE
+    literal = num | str_ | TRUE | FALSE | LPAR | RPAR | LBRACK | RBRACK | LBRACE | RBRACE | SEMI | COMMA | \
+        ASSIGN | MULT | ADD
     ident = (~keywords + ppc.identifier.copy()).setName('ident')
 
     expr = pp.Forward()
@@ -52,21 +66,17 @@ def _make_parser():
 
     stmt = pp.Forward()
 
-    input = INPUT.suppress() + ident
-    output = OUTPUT.suppress() + add
     assign = ident + ASSIGN.suppress() + add
 
     if_ = IF + LPAR + expr + RPAR + stmt + \
-        pp.Optional(ELSE + stmt)
+          pp.Optional(ELSE + stmt)
     for_ = FOR + LPAR + expr + SEMI + expr + SEMI + expr + RPAR + LBRACE + stmt + RBRACE
     while_ = WHILE + LPAR + expr + RPAR + LBRACE + stmt + RBRACE
     stmt << (
-        input |
-        output |
-        assign |
-        if_ |
-        for_ |
-        while_
+            assign |
+            if_ |
+            for_ |
+            while_
     )
     stmt_list = pp.ZeroOrMore(stmt)
     program = stmt_list.ignore(pp.cStyleComment).ignore(pp.dblSlashComment) + pp.StringEnd()
@@ -76,7 +86,7 @@ def _make_parser():
     def set_parse_action_magic(rule_name: str, parser_element: pp.ParserElement) -> None:
         if rule_name == rule_name.upper():
             return
-        #if getattr(parser_element, 'name', None) and parser_element.name.isidentifier():
+        # if getattr(parser_element, 'name', None) and parser_element.name.isidentifier():
         #    rule_name = parser_element.name
         if rule_name in ('mult', 'add'):
             def bin_op_parse_action(s, loc, tocs):
@@ -84,6 +94,7 @@ def _make_parser():
                 for i in range(1, len(tocs) - 1, 2):
                     node = BinOpNode(BinOp(tocs[i]), node, tocs[i + 1])
                 return node
+
             parser_element.setParseAction(bin_op_parse_action)
         else:
             cls = ''.join(x.capitalize() for x in rule_name.split('_')) + 'Node'
