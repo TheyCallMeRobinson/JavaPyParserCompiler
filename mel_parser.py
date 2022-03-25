@@ -21,10 +21,10 @@ def _make_parser():
     INT, DOUBLE, CHAR, FLOAT = pp.Keyword('int').suppress(), pp.Keyword('double').suppress(), \
                                pp.Keyword('char').suppress(), pp.Keyword('float').suppress()
     STRING, OBJECT = pp.Keyword('String').suppress(), pp.Keyword('Object').suppress()
-    INTARR, STRINGARR = pp.Keyword('int[]'), pp.Keyword('String[]').suppress()
+    INTARR, STRINGARR = pp.Keyword('int[]').suppress(), pp.Keyword('String[]').suppress()
     CLASS = pp.Keyword('class').suppress()
     STATIC = pp.Keyword('static').suppress()
-    PUBLIC, PRIVATE = pp.Keyword('public').suppress(), pp.Keyword('private')
+    PUBLIC, PRIVATE = pp.Keyword('public').suppress(), pp.Keyword('private').suppress()
     NEW = pp.Keyword('new').suppress()
     RETURN = pp.Keyword('return').suppress()
 
@@ -46,8 +46,9 @@ def _make_parser():
 
     num = pp.Regex('[+-]?\\d+\\.?\\d*([eE][+-]?\\d+)?')
     str_ = pp.QuotedString('"', escChar='\\', unquoteResults=False, convertWhitespaceEscapes=False)
-    literal = num | str_ | TRUE | FALSE | LPAR | RPAR | LBRACK | RBRACK | LBRACE | RBRACE | SEMI | COMMA | \
-        ASSIGN | MULT | ADD
+    literal = num | str_ | TRUE | FALSE
+    # single_literal = LPAR | RPAR | LBRACK | RBRACK | LBRACE | RBRACE | SEMI | COMMA | \
+    #     ASSIGN | MULT | ADD
     ident = (~keywords + ppc.identifier.copy()).setName('ident')
 
     expr = pp.Forward()
@@ -64,21 +65,24 @@ def _make_parser():
 
     expr << add
 
-    stmt = pp.Forward()
+    stmt_wout_semi = pp.Forward()
+    stmt_with_semi = pp.Forward()
 
     assign = ident + ASSIGN.suppress() + add
 
-    if_ = IF + LPAR + expr + RPAR + stmt + \
-          pp.Optional(ELSE + stmt)
-    for_ = FOR + LPAR + expr + SEMI + expr + SEMI + expr + RPAR + LBRACE + stmt + RBRACE
-    while_ = WHILE + LPAR + expr + RPAR + LBRACE + stmt + RBRACE
-    stmt << (
-            assign |
+    if_ = IF + LPAR + expr + RPAR + stmt_wout_semi + \
+          pp.Optional(ELSE + stmt_wout_semi)
+    for_ = FOR + LPAR + expr + SEMI + expr + SEMI + expr + RPAR + LBRACE + stmt_wout_semi + RBRACE
+    while_ = WHILE + LPAR + expr + RPAR + LBRACE + stmt_wout_semi + RBRACE
+    stmt_wout_semi << (
             if_ |
             for_ |
             while_
     )
-    stmt_list = pp.ZeroOrMore(stmt)
+    stmt_with_semi << (
+        assign
+    )
+    stmt_list = pp.ZeroOrMore(stmt_wout_semi)
     program = stmt_list.ignore(pp.cStyleComment).ignore(pp.dblSlashComment) + pp.StringEnd()
 
     start = program

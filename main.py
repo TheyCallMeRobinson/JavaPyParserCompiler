@@ -8,7 +8,8 @@ def main():
 
         if (a+7) b = 9
         while (a + 10) {a = 10}
-        for (d; a+10; c) {b = 50}
+        a = a+(a+a*(a*(a*5)))
+        for (d; a+10; c) {b = 50 + 165}
     ''')
     print(*prog.tree, sep=os.linesep)
 

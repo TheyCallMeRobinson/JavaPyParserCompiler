@@ -235,6 +235,19 @@ class WhileNode(StmtNode):
 #         return 'do while'
 
 
+class BodyNode(AstNode):
+    def __init__(self, *exprs: StmtNode):
+        super().__init__()
+        self.exprs = exprs
+
+    @property
+    def childs(self) -> Tuple[StmtNode]:
+        return self.exprs
+
+    def __str__(self) -> str:
+        pass
+
+
 class StmtListNode(AstNode):
     def __init__(self, *exprs: AstNode):
         super().__init__()
