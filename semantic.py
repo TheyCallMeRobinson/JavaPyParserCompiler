@@ -41,6 +41,15 @@ class BaseType(Enum):
         return self.value
 
 
+class AccessMod(Enum):
+    PRIVATE = 'private'
+    PROTECTED = 'protected'
+    PUBLIC = 'public'
+    
+    def __str__(self):
+        return self.value
+    
+
 VOID, INT, FLOAT, BOOL, STR = BaseType.VOID, BaseType.INT, BaseType.FLOAT, BaseType.BOOL, BaseType.STR
 
 
@@ -48,7 +57,7 @@ class TypeDesc:
     """Класс для описания типа данных.
 
        Сейчас поддерживаются только примитивные типы данных и функции.
-       При поддержки сложных типов (массивы и т.п.) должен быть рассширен
+       При поддержки сложных типов (массивы и т.п.) должен быть расширен
     """
 
     VOID: 'TypeDesc'

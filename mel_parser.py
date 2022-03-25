@@ -10,7 +10,11 @@ def _make_parser():
     IF = pp.Keyword('if')
     FOR = pp.Keyword('for')
     RETURN = pp.Keyword('return')
-    keywords = IF | FOR | RETURN
+    CLASS = pp.Keyword('class')
+    ACCESS_MOD = pp.oneOf('private protected public')
+    # PRIVATE, PROTECTED, PUBLIC = pp.Keyword('private'), pp.Keyword('protected'), \
+    #     pp.Keyword('public')
+    keywords = IF | FOR | RETURN | CLASS
 
     # num = ppc.fnumber.copy().setParseAction(lambda s, loc, tocs: tocs[0])
     num = pp.Regex('[+-]?\\d+\\.?\\d*([eE][+-]?\\d+)?')
@@ -76,6 +80,8 @@ def _make_parser():
     if_ = IF.suppress() + LPAR + expr + RPAR + stmt + pp.Optional(pp.Keyword("else").suppress() + stmt)
     for_ = FOR.suppress() + LPAR + for_stmt_list + SEMI + for_cond + SEMI + for_stmt_list + RPAR + for_body
     return_ = RETURN.suppress() + expr
+    class_ = pp.Optional(ACCESS_MOD) + CLASS.suppress() + ident + LBRACE + stmt_list + \
+                         RBRACE
     composite = LBRACE + stmt_list + RBRACE
 
     param = type_ + ident
@@ -83,6 +89,7 @@ def _make_parser():
     func = type_ + ident + LPAR + params + RPAR + LBRACE + stmt_list + RBRACE
 
     stmt << (
+        class_ |
         if_ |
         for_ |
         return_ |

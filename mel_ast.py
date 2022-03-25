@@ -4,6 +4,7 @@ from typing import Optional, Union, Tuple, Callable
 
 from semantic import *
 
+
 class AstNode(ABC):
     """Базовый абстрактый класс узла AST-дерева
     """
@@ -470,6 +471,27 @@ class FuncNode(StmtNode):
             self.name.semantic_error("Повторное объявление функции {}".format(self.name.name))
         self.body.semantic_check(scope)
         self.node_type = TypeDesc.VOID
+
+
+class ClsNode(StmtNode):
+    def __init__(
+        self,
+        name: IdentNode,
+        body: Tuple[StmtNode],
+    ) -> None:
+        super().__init__()
+        self.name = name
+        self.body = body
+
+    def __str__(self) -> str:
+        return 'class'
+
+    @property
+    def childs(self) -> AstNode:
+        return _GroupNode(str(self.name), *self.body)
+    
+    def semantic_check(self, scope: IdentScope) -> None:
+        pass
 
 
 class StmtListNode(StmtNode):

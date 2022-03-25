@@ -1,8 +1,11 @@
 import os
+from pathlib import Path
+
 import mel_parser
 
 
 def main():
+    prog_java = Path('java_example.java').read_text()
     prog1 = '''
            int input_int(string name) {
                if (name != "") {
@@ -55,7 +58,29 @@ def main():
                return "";
            }
        '''
-    prog = mel_parser.parse(prog1)
+    prog_test = '''
+        class slc {
+            int input_int(string name) {
+               if (name != "") {
+                   print("Введите " + name + ": ");
+               }
+               return to_int(read());
+
+               // bool a() { }
+           }
+           class newclass {
+                int input_int2(string name, int a, int name2) {
+                   if (name != "") {
+                       print("Введите " + name + ": ");
+                   }
+                   return "";
+                }
+           }
+        }
+    '''
+    # prog = mel_parser.parse(prog_java)
+    # prog = mel_parser.parse(prog2)
+    prog = mel_parser.parse(prog_test)
     print(*prog.tree, sep=os.linesep)
 
 
