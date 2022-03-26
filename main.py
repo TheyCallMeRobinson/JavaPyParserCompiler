@@ -3,15 +3,15 @@ import os
 from compiler_demo import my_parser
 
 def main() -> None:
-    test = '''private class A{
+    test1 = '''private class A{
     {
     b();
     int a = 1+2+b().a.b();
     a = 1;
     }
-    async int a(int b){
+    int a(int b){
         int a = a().b.c().c.v();
-        int a = await a();
+        int a = a();
         a();
     }
     public class A{
@@ -100,9 +100,7 @@ public class Main {
 '''
     test4 = '''
     public class Main {
-        public static void main(String[] args) {
-            OldClass.oldClassMethod(10, 20.5);
-        }
+        int a = 1;
     }'''
     prog = my_parser.parse(test4)
     ast_tree = prog.tree

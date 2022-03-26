@@ -19,8 +19,6 @@ def make_parser():
     MUL, DIV, MOD = pp.Literal('*'), pp.Literal('/'), pp.Literal('%')
     AND = pp.Literal('&&')
     OR = pp.Literal('||')
-    BIT_AND = pp.Literal('&')
-    BIT_OR = pp.Literal('|')
     GE, LE, GT, LT = pp.Literal('>='), pp.Literal('<='), pp.Literal('>'), pp.Literal('<')
     NEQUALS, EQUALS = pp.Literal('!='), pp.Literal('==')
     P_EQ, M_EQ, DEL_EQ, MUL_EQ = pp.Literal('+='), pp.Literal('-='), pp.Literal('/='), pp.Literal('*=')
@@ -36,9 +34,6 @@ def make_parser():
     VOID = pp.Literal('void').suppress()
 
     CLASS = pp.Literal('class').suppress()
-
-    ASYNC = pp.Literal('async')
-    AWAIT = pp.Literal('await')
 
     IF = pp.Keyword('if')
     FOR = pp.Keyword('for')
@@ -92,10 +87,10 @@ def make_parser():
     op_assign = pp.Group(logical_or + pp.ZeroOrMore((MUL_EQ | DEL_EQ | P_EQ | M_EQ) + logical_or)).setName('bin_op')
     expr << op_assign
 
-    caller << (AWAIT | pp.Group(pp.Empty())) + expr
+    caller << expr
     param = type_ + ident
     params = pp.Optional(param + pp.ZeroOrMore(COMMA + param))
-    func_struct = (ASYNC | pp.Group(pp.Empty())) + (access_keys | pp.Group(pp.Empty())) + (
+    func_struct = (access_keys | pp.Group(pp.Empty())) + (
             STATIC | pp.Group(pp.Empty())) + type_ + ident + LPAR + params + RPAR
 
     func = func_struct + func_body
@@ -154,7 +149,7 @@ def make_parser():
             if not inspect.isabstract(cls):
                 def parse_action(s, loc, tocs):
                     if cls is FuncNode:
-                        return FuncNode(tocs[0], tocs[1], tocs[2], tocs[3], tocs[4], tocs[5:-1], tocs[-1], loc=loc)
+                        return FuncNode(tocs[0], tocs[1], tocs[2], tocs[3], tocs[4:-1], tocs[-1], loc=loc)
                     else:
                         return cls(*tocs, loc=loc)
 

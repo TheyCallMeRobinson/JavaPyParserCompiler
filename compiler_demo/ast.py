@@ -23,10 +23,7 @@ class AstNode(ABC):
             AstNode.init_action(self)
         self.node_type: Optional[TypeDesc] = None
         self.node_ident: Optional[IdentDesc] = None
-        self.await_names = []
         self.type_changing = []
-        self.is_async = False
-        self.external_await_names = []
         self.external_type_changing = []
 
     @abstractmethod
@@ -81,11 +78,10 @@ class _GroupNode(AstNode):
         return self._childs
 
 
-
 class ExprNode(AstNode, ABC):
     """Абстракный класс для выражений в AST-дереве
     """
-
+    pass
 
 
 class LiteralNode(ExprNode):
@@ -105,7 +101,6 @@ class LiteralNode(ExprNode):
         return self.literal
 
 
-
 class IdentNode(ExprNode):
     """Класс для представления в AST-дереве идентификаторов
     """
@@ -117,7 +112,6 @@ class IdentNode(ExprNode):
 
     def __str__(self) -> str:
         return str(self.name)
-
 
 
 class TypeNode(IdentNode):
@@ -136,10 +130,6 @@ class TypeNode(IdentNode):
         return self.to_str()
 
 
-    def await_names_check(self):
-        return [], []
-
-
 class AccessNode(IdentNode):
 
     def __init__(self, name: str,
@@ -151,10 +141,6 @@ class AccessNode(IdentNode):
 
     def to_str_full(self):
         return self.to_str()
-
-
-    def await_names_check(self):
-        return [], []
 
 
 class CallNode(ExprNode):
@@ -171,9 +157,6 @@ class CallNode(ExprNode):
     def __str__(self) -> str:
         return 'call'
 
-    def await_names_check(self):
-        return [], []
-
     @property
     def childs(self) -> Tuple[AstNode, ...]:
         return self.func, _GroupNode('params', *self.params)
@@ -184,47 +167,18 @@ class CallerNode(ExprNode):
        (в языке программирования может быть как expression, так и statement)
     """
 
-    def __init__(self, call: CallNode, expr: ExprNode,
+    def __init__(self, func: IdentNode, *params: ExprNode,
                  row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
         super().__init__(row=row, col=col, **props)
-        self.call = call
-        self.expr = expr
+        self.func = func
+        self.params = params
 
     def __str__(self) -> str:
         return 'call'
 
-    def is_await(self):
-        if isinstance(self.childs[1], CallNode) and self.childs[1].col == "await":
-            return True
-        else:
-            return False
-
     @property
-    def childs(self) -> Tuple[AstNode, ...]:
-        return _GroupNode(str(self.call)), self.expr
-
-    def await_names_check(self):
-        return [], []
-
-
-class TypeConvertNode(ExprNode):
-    """Класс для представления в AST-дереве операций конвертации типов данных
-       (в языке программирования может быть как expression, так и statement)
-    """
-
-    def __init__(self, expr: ExprNode, type_: TypeDesc,
-                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
-        super().__init__(row=row, col=col, **props)
-        self.expr = expr
-        self.type = type_
-        self.node_type = type_
-
-    def __str__(self) -> str:
-        return 'convert'
-
-    @property
-    def childs(self) -> Tuple[AstNode, ...]:
-        return (_GroupNode(str(self.type), self.expr),)
+    def childs(self) -> Tuple[IdentNode, ...]:
+        return (self.func, *self.params)
 
 
 class StmtNode(ExprNode, ABC):
@@ -233,9 +187,6 @@ class StmtNode(ExprNode, ABC):
 
     def to_str_full(self):
         return self.to_str()
-
-    def await_names_check(self):
-        return [], []
 
 
 class FuncStmtNode(ExprNode, ABC):
@@ -259,12 +210,6 @@ class AssignNode(ExprNode):
     def __str__(self) -> str:
         return '='
 
-    def await_names_check(self):
-        if self.childs[1].is_await():
-            return [self.childs[0].name], [self.childs[0].name]
-        else:
-            return [], []
-
     @property
     def childs(self) -> Tuple[IdentNode, ExprNode]:
         return self.var, self.val
@@ -283,20 +228,6 @@ class VarsNode(StmtNode):
     def __str__(self) -> str:
         return str(self.type)
 
-    def await_names_check(self):
-        result, type_change = [], []
-        for i in self.childs:
-            if isinstance(i, AssignNode):
-                if i.childs[1].call == 'await':
-                    self.is_async = True
-                    type_change.append(i.childs[0].name)
-                    result.append(i.childs[0].name)
-                tmp_result, tmp_type_change = i.await_names_check()
-                result.extend(tmp_result)
-                type_change.extend(tmp_type_change)
-
-        return result, type_change
-
     @property
     def childs(self) -> Tuple[AstNode, ...]:
         return self.vars
@@ -313,9 +244,6 @@ class NewNode(StmtNode):
 
     def __str__(self) -> str:
         return 'new '
-
-    def await_names_check(self):
-        return [], []
 
     @property
     def childs(self) -> Tuple[ExprNode]:
@@ -338,9 +266,6 @@ class ReturnNode(StmtNode):
     def childs(self) -> Tuple[ExprNode]:
         return (self.val,)
 
-    def await_names_check(self, is_await):
-        return [], []
-
 
 class IfNode(StmtNode):
     """Класс для представления в AST-дереве условного оператора
@@ -353,22 +278,10 @@ class IfNode(StmtNode):
         self.then_stmt = then_stmt
         self.else_stmt = else_stmt
 
-        self.await_names = []
         self.type_changing = []
-        self.is_async = []
-        self.external_await_names = []
-        self.await_names = []
 
     def __str__(self) -> str:
         return 'if'
-
-    def await_names_check(self):
-        result, type_change = [], []
-        for x in self.childs:
-            tmp_result, tmp_type_change = x.await_names_check()
-            result.extend(tmp_result)
-            type_change.extend(tmp_type_change)
-        return result, type_change
 
     @property
     def childs(self) -> Tuple[ExprNode, StmtNode, Optional[StmtNode]]:
@@ -395,14 +308,6 @@ class ForNode(StmtNode):
     def childs(self) -> Tuple[AstNode, ...]:
         return self.init, self.cond, self.step, self.body
 
-    def await_names_check(self):
-        result, type_change = [], []
-        for x in self.childs:
-            tmp_result, tmp_type_change = x.await_names_check()
-            result.extend(tmp_result)
-            type_change.extend(tmp_type_change)
-        return result, type_change
-
 
 class ParamNode(StmtNode):
     """Класс для представления в AST-дереве объявления параметра функции
@@ -426,11 +331,10 @@ class FuncNode(StmtNode):
     """Класс для представления в AST-дереве объявления функции
     """
 
-    def __init__(self, async_: AccessNode, access: AccessNode, static: AccessNode, type_: TypeNode, name: IdentNode,
+    def __init__(self, access: AccessNode, static: AccessNode, type_: TypeNode, name: IdentNode,
                  params: Tuple[ParamNode], body: Optional[StmtNode] = None,
                  row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
         super().__init__(row=row, col=col, **props)
-        self.async_ = async_
         self.access = access if access else empty_access
         self.static = static
         self.type = type_
@@ -441,23 +345,13 @@ class FuncNode(StmtNode):
     def __str__(self) -> str:
         return 'function'
 
-    def await_names_check(self):
-        if self.async_ == "async":
-            self.await_names.extend([x.name.name for x in self.params])
-            tmp_result, temp_type_change = self.body.await_names_check(True)
-        else:
-            tmp_result, temp_type_change = self.body.await_names_check(False)
-        self.await_names.extend(tmp_result)
-        self.type_changing.extend(temp_type_change)
-
     @property
     def childs(self) -> Tuple[AstNode, ...]:
-        return _GroupNode(str(self.async_),
-                          _GroupNode(str(self.access),
-                                     _GroupNode(str(self.static),
-                                                _GroupNode(str(self.type),
-                                                           self.name),
-                                                ))), _GroupNode('params', *self.params), self.body
+        return _GroupNode(str(self.access),
+                          _GroupNode(str(self.static),
+                                     _GroupNode(str(self.type),
+                                                self.name),
+                                     )), _GroupNode('params', *self.params), self.body
 
 
 class StmtListNode(StmtNode):
@@ -477,18 +371,6 @@ class StmtListNode(StmtNode):
     def childs(self) -> Tuple[StmtNode, ...]:
         return self.exprs
 
-    def await_names_check(self):
-        result = []
-        type_change = []
-        for x in self.childs:
-            if isinstance(x, FuncNode):
-                x.await_names_check()
-            else:
-                tmp_result, tmp_type_change = x.await_names_check()
-                result.extend(tmp_result)
-                type_change.extend(tmp_type_change)
-        return result, type_change
-
 
 class FuncStmtListNode(StmtNode):
     """Класс для представления в AST-дереве последовательности инструкций
@@ -502,17 +384,6 @@ class FuncStmtListNode(StmtNode):
 
     def __str__(self) -> str:
         return '...'
-
-    def await_names_check(self, *args):
-        result, type_change = [], []
-        for x in self.exprs:
-            if isinstance(x, ReturnNode):
-                tmp_result, tmp_type_change = x.await_names_check(args[0])
-            else :
-                tmp_result, tmp_type_change = x.await_names_check()
-            result.extend(tmp_result)
-            type_change.extend(tmp_type_change)
-        return result, type_change
 
     @property
     def childs(self) -> Tuple[StmtNode, ...]:
