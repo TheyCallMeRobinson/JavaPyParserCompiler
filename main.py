@@ -1,87 +1,113 @@
 import os
-from pathlib import Path
 
-import mel_parser
+from compiler_demo import my_parser
 
+def main() -> None:
+    test = '''private class A{
+    {
+    b();
+    int a = 1+2+b().a.b();
+    a = 1;
+    }
+    async int a(int b){
+        int a = a().b.c().c.v();
+        int a = await a();
+        a();
+    }
+    public class A{
+    class A{
+    int a = 0, b = a, c;
+    String a = 0, b = a, c;
+    }
+    }
+    }
+    }'''
+    test2 = '''class OldClass {
+    public static int oldClassMethod(int a, double b) {
+        NewClass nc1 = new NewClass(a, b);
+        NewClass nc2 = new NewClass(0, 0.0);
+        int result = nc1.classMethod(50);
+        return result;
+    }
+}
 
-def main():
-    prog_java = Path('java_example.java').read_text()
-    prog1 = '''
-           int input_int(string name) {
-               if (name != "") {
-                   print("Введите " + name + ": ");
-               }
-               return to_int(read());
-           }
-           float input_float(string name) {
-               if (name != "") {
-                   print("Введите " + name + ": ");
-               }
-               return to_float(read());
-           }
+class NewClass {
+    private int privateInt;
+    public Double publicDouble;
 
-           int g, g2 = g, g4 = 90;
+    public NewClass(int i, Double d) {
+        privateInt = i;
+        publicDouble = d;
+    }
 
-           int a = input_int("a");
-           float b = input_float("b"), c = input_float("c");  /* comment 1
-           int d = input_int("d");
-           */
-           for (int i = 0, j = 8; ((i <= 5)) && g; i = i + 1, print(5))
-               for(; a < b;)
-                   if (a > 7 + b) {
-                       c = a + b * (2 - 1) + 0;  // comment 2
-                       string bb = "98\tура";
-                   }
-                   else if (a)
-                       print((c + 1) + " " + 89.89);
-           for(bool i = true;;);
-
-           int z;
-           z=0;
-       '''
-    prog2 = 'int f1(int p1, float p2) { string a = p1 + p2; int x; }'''
-    prog3 = 'for (;;);'
-    prog4 = 'int i; i = 5;'
-    prog5 = '''
-           int input_int(string name) {
-               if (name != "") {
-                   print("Введите " + name + ": ");
-               }
-               return to_int(read());
-
-               // bool a() { }
-           }
-           int input_int2(string name, int a, int name2) {
-               if (name != "") {
-                   print("Введите " + name + ": ");
-               }
-               return "";
-           }
-       '''
-    prog_test = '''
-        class slc {
-            int input_int(string name) {
-               if (name != "") {
-                   print("Введите " + name + ": ");
-               }
-               return to_int(read());
-
-               // bool a() { }
-           }
-           class newclass {
-                int input_int2(string name, int a, int name2) {
-                   if (name != "") {
-                       print("Введите " + name + ": ");
-                   }
-                   return "";
-                }
-           }
+    public int classMethod(int u) {
+        int a1 = 5, a2 = 10;
+        int varInt = 2;
+        double varDouble = 2.0;
+        String varString = "hello";
+        Object varNull = null;
+        int[] array = new int[]{1, 2, 3};
+        double sum = array[0] + array[1];
+        double dif = a1 - a2;
+        double multiply = a1 * a2;
+        //double power = Math.pow(a1, a2);
+        double division = a1 / a2;
+        if (a1 > 1) {
+            for (int i = 0; a2 <= 10; i++) {
+                break;
+            }
+        } else {
+            //System.out.print("Hello, World!");
         }
-    '''
-    # prog = mel_parser.parse(prog_java)
-    # prog = mel_parser.parse(prog2)
-    prog = mel_parser.parse(prog_test)
-    print(*prog.tree, sep=os.linesep)
+        int a = 2;
+        while (a-- > 0) {
+            int c = 5;
+            do {
+                c++;
+            } while (c > 0);
+        }
+        return a;
+    }
+}
+public class Main {
+    public static void main(String[] args) {
+        OldClass.oldClassMethod(10, 20.5);
+    }
+}'''
+    test3 = '''class NewClass {
+        public int classMethod(int u) {
+            int a1 = 5, a2 = 10;
+            int varInt = 2;
+            double varDouble = 2.0;
+            String varString = "hello";
+            Object varNull = null;
+            double dif = a1 - a2;
+            double multiply = a1 * a2;
+            double division = a1 / a2;
+            if (a1 > 1) {
+            } else {
+            }
+            for (;;) {
+                }
+            int a = 2;
+            return a;
+        }
+    }
+        public class Main {
+        public static void main(String[] args) {
+            OldClass.oldClassMethod(10, 20.5);
+        }
+'''
+    test4 = '''
+    public class Main {
+        public static void main(String[] args) {
+            OldClass.oldClassMethod(10, 20.5);
+        }
+    }'''
+    prog = my_parser.parse(test4)
+    ast_tree = prog.tree
+
+    print(*ast_tree, sep=os.linesep)
 
 
 if __name__ == "__main__":

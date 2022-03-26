@@ -2,12 +2,14 @@ from abc import ABC, abstractmethod
 from contextlib import suppress
 from typing import Optional, Union, Tuple, Callable
 
-from semantic import *
+from .semantic import TypeDesc, IdentDesc, AccessType
+
+TYPES = {"int": "Integer", "float": "Float", "double": "Double", "boolean": "Boolean", "short": "Short", "char": "Char",
+         "long": "Long", "byte": "Byte"}
 
 
 class AstNode(ABC):
-    """Базовый абстрактый класс узла AST-дерева
-    """
+    """Базовый абстрактый класс узла AST-дерева"""
 
     init_action: Callable[['AstNode'], None] = None
 
@@ -21,6 +23,11 @@ class AstNode(ABC):
             AstNode.init_action(self)
         self.node_type: Optional[TypeDesc] = None
         self.node_ident: Optional[IdentDesc] = None
+        self.await_names = []
+        self.type_changing = []
+        self.is_async = False
+        self.external_await_names = []
+        self.external_type_changing = []
 
     @abstractmethod
     def __str__(self) -> str:
@@ -40,12 +47,6 @@ class AstNode(ABC):
         elif self.node_type:
             r = str(self.node_type)
         return self.to_str() + (' : ' + r if r else '')
-
-    def semantic_error(self, message: str):
-        raise SemanticException(message, self.row, self.col)
-
-    def semantic_check(self, scope: IdentScope) -> None:
-        pass
 
     @property
     def tree(self) -> [str, ...]:
@@ -80,11 +81,11 @@ class _GroupNode(AstNode):
         return self._childs
 
 
+
 class ExprNode(AstNode, ABC):
     """Абстракный класс для выражений в AST-дереве
     """
 
-    pass
 
 
 class LiteralNode(ExprNode):
@@ -103,18 +104,6 @@ class LiteralNode(ExprNode):
     def __str__(self) -> str:
         return self.literal
 
-    def semantic_check(self, scope: IdentScope) -> None:
-        if isinstance(self.value, bool):
-            self.node_type = TypeDesc.BOOL
-        # проверка должна быть позже bool, т.к. bool наследник от int
-        elif isinstance(self.value, int):
-            self.node_type = TypeDesc.INT
-        elif isinstance(self.value, float):
-            self.node_type = TypeDesc.FLOAT
-        elif isinstance(self.value, str):
-            self.node_type = TypeDesc.STR
-        else:
-            self.semantic_error('Неизвестный тип {} для {}'.format(type(self.value), self.value))
 
 
 class IdentNode(ExprNode):
@@ -129,12 +118,6 @@ class IdentNode(ExprNode):
     def __str__(self) -> str:
         return str(self.name)
 
-    def semantic_check(self, scope: IdentScope) -> None:
-        ident = scope.get_ident(self.name)
-        if ident is None:
-            self.semantic_error('Идентификатор {} не найден'.format(self.name))
-        self.node_type = ident.type
-        self.node_ident = ident
 
 
 class TypeNode(IdentNode):
@@ -146,15 +129,32 @@ class TypeNode(IdentNode):
                  row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
         super().__init__(name, row=row, col=col, **props)
         self.type = None
-        with suppress(SemanticException):
+        with suppress(ValueError):
             self.type = TypeDesc.from_str(name)
 
     def to_str_full(self):
         return self.to_str()
 
-    def semantic_check(self, scope: IdentScope) -> None:
-        if self.type is None:
-            self.semantic_error('Неизвестный тип {}'.format(self.name))
+
+    def await_names_check(self):
+        return [], []
+
+
+class AccessNode(IdentNode):
+
+    def __init__(self, name: str,
+                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
+        super().__init__(name, row=row, col=col, **props)
+        self.type = None
+        with suppress(ValueError):
+            self.type = AccessType.from_str(name)
+
+    def to_str_full(self):
+        return self.to_str()
+
+
+    def await_names_check(self):
+        return [], []
 
 
 class CallNode(ExprNode):
@@ -171,46 +171,40 @@ class CallNode(ExprNode):
     def __str__(self) -> str:
         return 'call'
 
-    @property
-    def childs(self) -> Tuple[IdentNode, ...]:
-        return (self.func, *self.params)
+    def await_names_check(self):
+        return [], []
 
-    def semantic_check(self, scope: IdentScope) -> None:
-        func = scope.get_ident(self.func.name)
-        if func is None:
-            self.semantic_error('Функция {} не найдена'.format(self.func.name))
-        if not func.type.func:
-            self.semantic_error('Идентификатор {} не является функцией'.format(func.name))
-        if len(func.type.params) != len(self.params):
-            self.semantic_error('Кол-во аргументов {} не совпадает (ожидалось {}, передано {})'.format(
-                func.name, len(func.type.params), len(self.params)
-            ))
-        params = []
-        error = False
-        decl_params_str = fact_params_str = ''
-        for i in range(len(self.params)):
-            param: ExprNode = self.params[i]
-            param.semantic_check(scope)
-            if (len(decl_params_str) > 0):
-                decl_params_str += ', '
-            decl_params_str += str(func.type.params[i])
-            if (len(fact_params_str) > 0):
-                fact_params_str += ', '
-            fact_params_str += str(param.node_type)
-            try:
-                params.append(type_convert(param, func.type.params[i]))
-            except:
-                error = True
-        if error:
-            self.semantic_error('Фактические типы ({1}) аргументов функции {0} не совпадают с формальными ({2})\
-                                    и не приводимы'.format(
-                func.name, fact_params_str, decl_params_str
-            ))
+    @property
+    def childs(self) -> Tuple[AstNode, ...]:
+        return self.func, _GroupNode('params', *self.params)
+
+
+class CallerNode(ExprNode):
+    """Класс для представления в AST-дереве вызова функций
+       (в языке программирования может быть как expression, так и statement)
+    """
+
+    def __init__(self, call: CallNode, expr: ExprNode,
+                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
+        super().__init__(row=row, col=col, **props)
+        self.call = call
+        self.expr = expr
+
+    def __str__(self) -> str:
+        return 'call'
+
+    def is_await(self):
+        if isinstance(self.childs[1], CallNode) and self.childs[1].col == "await":
+            return True
         else:
-            self.params = tuple(params)
-            self.func.node_type = func.type
-            self.func.node_ident = func
-            self.node_type = func.type.return_type
+            return False
+
+    @property
+    def childs(self) -> Tuple[AstNode, ...]:
+        return _GroupNode(str(self.call)), self.expr
+
+    def await_names_check(self):
+        return [], []
 
 
 class TypeConvertNode(ExprNode):
@@ -230,32 +224,21 @@ class TypeConvertNode(ExprNode):
 
     @property
     def childs(self) -> Tuple[AstNode, ...]:
-        return (_GroupNode(str(self.type), self.expr), )
-
-
-def type_convert(expr: ExprNode, type_: TypeDesc, except_node: Optional[AstNode] = None, comment: Optional[str] = None) -> ExprNode:
-    """Метод преобразования ExprNode узла AST-дерева к другому типу
-    :param expr: узел AST-дерева
-    :param type_: требуемый тип
-    :param except_node: узел, о которого будет исключение
-    :param comment: комментарий
-    :return: узел AST-дерева c операцией преобразования
-    """
-
-    if expr.node_type is None:
-        except_node.semantic_error('Тип выражения не определен')
-    if expr.node_type == type_:
-        return expr
-    if expr.node_type.is_simple and type_.is_simple and \
-            expr.node_type.base_type in TYPE_CONVERTIBILITY and type_.base_type in TYPE_CONVERTIBILITY[expr.node_type.base_type]:
-        return TypeConvertNode(expr, type_)
-    else:
-        (except_node if except_node else expr).semantic_error('Тип {0}{2} не конвертируется в {1}'.format(
-            expr.node_type, type_, ' ({})'.format(comment) if comment else ''
-        ))
+        return (_GroupNode(str(self.type), self.expr),)
 
 
 class StmtNode(ExprNode, ABC):
+    """Абстракный класс для деклараций или инструкций в AST-дереве
+    """
+
+    def to_str_full(self):
+        return self.to_str()
+
+    def await_names_check(self):
+        return [], []
+
+
+class FuncStmtNode(ExprNode, ABC):
     """Абстракный класс для деклараций или инструкций в AST-дереве
     """
 
@@ -276,15 +259,15 @@ class AssignNode(ExprNode):
     def __str__(self) -> str:
         return '='
 
+    def await_names_check(self):
+        if self.childs[1].is_await():
+            return [self.childs[0].name], [self.childs[0].name]
+        else:
+            return [], []
+
     @property
     def childs(self) -> Tuple[IdentNode, ExprNode]:
         return self.var, self.val
-
-    def semantic_check(self, scope: IdentScope) -> None:
-        self.var.semantic_check(scope)
-        self.val.semantic_check(scope)
-        self.val = type_convert(self.val, self.var.node_type, self, 'присваиваемое значение')
-        self.node_type = self.var.node_type
 
 
 class VarsNode(StmtNode):
@@ -300,20 +283,43 @@ class VarsNode(StmtNode):
     def __str__(self) -> str:
         return str(self.type)
 
+    def await_names_check(self):
+        result, type_change = [], []
+        for i in self.childs:
+            if isinstance(i, AssignNode):
+                if i.childs[1].call == 'await':
+                    self.is_async = True
+                    type_change.append(i.childs[0].name)
+                    result.append(i.childs[0].name)
+                tmp_result, tmp_type_change = i.await_names_check()
+                result.extend(tmp_result)
+                type_change.extend(tmp_type_change)
+
+        return result, type_change
+
     @property
     def childs(self) -> Tuple[AstNode, ...]:
         return self.vars
 
-    def semantic_check(self, scope: IdentScope) -> None:
-        self.type.semantic_check(scope)
-        for var in self.vars:
-            var_node: IdentNode = var.var if isinstance(var, AssignNode) else var
-            try:
-                scope.add_ident(IdentDesc(var_node.name, self.type.type))
-            except SemanticException as e:
-                var_node.semantic_error(e.message)
-            var.semantic_check(scope)
-        self.node_type = TypeDesc.VOID
+
+class NewNode(StmtNode):
+    """Класс для представления в AST-дереве оператора return
+    """
+
+    def __init__(self, val: CallNode,
+                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
+        super().__init__(row=row, col=col, **props)
+        self.val = val
+
+    def __str__(self) -> str:
+        return 'new '
+
+    def await_names_check(self):
+        return [], []
+
+    @property
+    def childs(self) -> Tuple[ExprNode]:
+        return (self.val,)
 
 
 class ReturnNode(StmtNode):
@@ -330,15 +336,10 @@ class ReturnNode(StmtNode):
 
     @property
     def childs(self) -> Tuple[ExprNode]:
-        return (self.val, )
+        return (self.val,)
 
-    def semantic_check(self, scope: IdentScope) -> None:
-        self.val.semantic_check(IdentScope(scope))
-        func = scope.curr_func
-        if func is None:
-            self.semantic_error('Оператор return применим только к функции')
-        self.val = type_convert(self.val, func.func.type.return_type, self, 'возвращаемое значение')
-        self.node_type = TypeDesc.VOID
+    def await_names_check(self, is_await):
+        return [], []
 
 
 class IfNode(StmtNode):
@@ -352,20 +353,26 @@ class IfNode(StmtNode):
         self.then_stmt = then_stmt
         self.else_stmt = else_stmt
 
+        self.await_names = []
+        self.type_changing = []
+        self.is_async = []
+        self.external_await_names = []
+        self.await_names = []
+
     def __str__(self) -> str:
         return 'if'
+
+    def await_names_check(self):
+        result, type_change = [], []
+        for x in self.childs:
+            tmp_result, tmp_type_change = x.await_names_check()
+            result.extend(tmp_result)
+            type_change.extend(tmp_type_change)
+        return result, type_change
 
     @property
     def childs(self) -> Tuple[ExprNode, StmtNode, Optional[StmtNode]]:
         return (self.cond, self.then_stmt, *((self.else_stmt,) if self.else_stmt else tuple()))
-
-    def semantic_check(self, scope: IdentScope) -> None:
-        self.cond.semantic_check(scope)
-        self.cond = type_convert(self.cond, TypeDesc.BOOL, None, 'условие')
-        self.then_stmt.semantic_check(IdentScope(scope))
-        if self.else_stmt:
-            self.else_stmt.semantic_check(IdentScope(scope))
-        self.node_type = TypeDesc.VOID
 
 
 class ForNode(StmtNode):
@@ -388,16 +395,13 @@ class ForNode(StmtNode):
     def childs(self) -> Tuple[AstNode, ...]:
         return self.init, self.cond, self.step, self.body
 
-    def semantic_check(self, scope: IdentScope) -> None:
-        scope = IdentScope(scope)
-        self.init.semantic_check(scope)
-        if self.cond == EMPTY_STMT:
-            self.cond = LiteralNode('true')
-        self.cond.semantic_check(scope)
-        self.cond = type_convert(self.cond, TypeDesc.BOOL, None, 'условие')
-        self.step.semantic_check(scope)
-        self.body.semantic_check(IdentScope(scope))
-        self.node_type = TypeDesc.VOID
+    def await_names_check(self):
+        result, type_change = [], []
+        for x in self.childs:
+            tmp_result, tmp_type_change = x.await_names_check()
+            result.extend(tmp_result)
+            type_change.extend(tmp_type_change)
+        return result, type_change
 
 
 class ParamNode(StmtNode):
@@ -417,23 +421,18 @@ class ParamNode(StmtNode):
     def childs(self) -> Tuple[IdentNode]:
         return self.name,
 
-    def semantic_check(self, scope: IdentScope) -> None:
-        self.type.semantic_check(scope)
-        self.name.node_type = self.type.type
-        try:
-            self.name.node_ident = scope.add_ident(IdentDesc(self.name.name, self.type.type, ScopeType.PARAM))
-        except SemanticException:
-            raise self.name.semantic_error('Параметр {} уже объявлен'.format(self.name.name))
-        self.node_type = TypeDesc.VOID
-
 
 class FuncNode(StmtNode):
     """Класс для представления в AST-дереве объявления функции
     """
 
-    def __init__(self, type_: TypeNode, name: IdentNode, params: Tuple[ParamNode], body: StmtNode,
+    def __init__(self, async_: AccessNode, access: AccessNode, static: AccessNode, type_: TypeNode, name: IdentNode,
+                 params: Tuple[ParamNode], body: Optional[StmtNode] = None,
                  row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
         super().__init__(row=row, col=col, **props)
+        self.async_ = async_
+        self.access = access if access else empty_access
+        self.static = static
         self.type = type_
         self.name = name
         self.params = params
@@ -442,56 +441,23 @@ class FuncNode(StmtNode):
     def __str__(self) -> str:
         return 'function'
 
+    def await_names_check(self):
+        if self.async_ == "async":
+            self.await_names.extend([x.name.name for x in self.params])
+            tmp_result, temp_type_change = self.body.await_names_check(True)
+        else:
+            tmp_result, temp_type_change = self.body.await_names_check(False)
+        self.await_names.extend(tmp_result)
+        self.type_changing.extend(temp_type_change)
+
     @property
     def childs(self) -> Tuple[AstNode, ...]:
-        return _GroupNode(str(self.type), self.name), _GroupNode('params', *self.params), self.body
-
-    def semantic_check(self, scope: IdentScope) -> None:
-        if scope.curr_func:
-            self.semantic_error("Объявление функции ({}) внутри другой функции не поддерживается".format(self.name.name))
-        parent_scope = scope
-        self.type.semantic_check(scope)
-        scope = IdentScope(scope)
-
-        # временно хоть какое-то значение, чтобы при добавлении параметров находить scope функции
-        scope.func = EMPTY_IDENT
-        params = []
-        for param in self.params:
-            # при проверке параметров происходит их добавление в scope
-            param.semantic_check(scope)
-            params.append(param.type.type)
-
-        type_ = TypeDesc(None, self.type.type, tuple(params))
-        func_ident = IdentDesc(self.name.name, type_)
-        scope.func = func_ident
-        self.name.node_type = type_
-        try:
-            self.name.node_ident = parent_scope.curr_global.add_ident(func_ident)
-        except SemanticException as e:
-            self.name.semantic_error("Повторное объявление функции {}".format(self.name.name))
-        self.body.semantic_check(scope)
-        self.node_type = TypeDesc.VOID
-
-
-class ClsNode(StmtNode):
-    def __init__(
-        self,
-        name: IdentNode,
-        body: Tuple[StmtNode],
-    ) -> None:
-        super().__init__()
-        self.name = name
-        self.body = body
-
-    def __str__(self) -> str:
-        return 'class'
-
-    @property
-    def childs(self) -> AstNode:
-        return _GroupNode(str(self.name), *self.body)
-    
-    def semantic_check(self, scope: IdentScope) -> None:
-        pass
+        return _GroupNode(str(self.async_),
+                          _GroupNode(str(self.access),
+                                     _GroupNode(str(self.static),
+                                                _GroupNode(str(self.type),
+                                                           self.name),
+                                                ))), _GroupNode('params', *self.params), self.body
 
 
 class StmtListNode(StmtNode):
@@ -511,13 +477,70 @@ class StmtListNode(StmtNode):
     def childs(self) -> Tuple[StmtNode, ...]:
         return self.exprs
 
-    def semantic_check(self, scope: IdentScope) -> None:
-        if not self.program:
-            scope = IdentScope(scope)
-        for expr in self.exprs:
-            expr.semantic_check(scope)
-        self.node_type = TypeDesc.VOID
+    def await_names_check(self):
+        result = []
+        type_change = []
+        for x in self.childs:
+            if isinstance(x, FuncNode):
+                x.await_names_check()
+            else:
+                tmp_result, tmp_type_change = x.await_names_check()
+                result.extend(tmp_result)
+                type_change.extend(tmp_type_change)
+        return result, type_change
+
+
+class FuncStmtListNode(StmtNode):
+    """Класс для представления в AST-дереве последовательности инструкций
+    """
+
+    def __init__(self, *exprs: StmtNode,
+                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
+        super().__init__(row=row, col=col, **props)
+        self.exprs = exprs
+        self.program = False
+
+    def __str__(self) -> str:
+        return '...'
+
+    def await_names_check(self, *args):
+        result, type_change = [], []
+        for x in self.exprs:
+            if isinstance(x, ReturnNode):
+                tmp_result, tmp_type_change = x.await_names_check(args[0])
+            else :
+                tmp_result, tmp_type_change = x.await_names_check()
+            result.extend(tmp_result)
+            type_change.extend(tmp_type_change)
+        return result, type_change
+
+    @property
+    def childs(self) -> Tuple[StmtNode, ...]:
+        return self.exprs
 
 
 EMPTY_STMT = StmtListNode()
 EMPTY_IDENT = IdentDesc('', TypeDesc.VOID)
+
+
+class ClassInitNode(StmtNode):
+    """Класс для представления в AST-дереве объявления функции
+    """
+
+    def __init__(self, access: AccessNode, name: IdentNode, body: Optional[StmtListNode] = None,
+                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
+        super().__init__(row=row, col=col, **props)
+        self.access = access if access else empty_access
+        self.name = name
+        self.body = body if body else empty_statement_list
+
+    def __str__(self) -> str:
+        return 'class'
+
+    @property
+    def childs(self) -> Tuple[AstNode, ...]:
+        return _GroupNode(str(self.access), self.name), self.body
+
+
+empty_statement_list = StmtListNode()
+empty_access = AccessNode("")
