@@ -33,20 +33,20 @@ def make_parser():
     STATIC = pp.Literal('static')
     VOID = pp.Literal('void').suppress()
 
-    CLASS = pp.Literal('class').suppress()
+    CLASS = pp.Keyword('class').suppress()
 
     IF = pp.Keyword('if')
     FOR = pp.Keyword('for')
     RETURN = pp.Keyword('return')
     NEW = pp.Keyword('new')
-    keywords = IF | FOR | RETURN
+    keywords = IF | FOR | RETURN | CLASS
 
     num = pp.Regex('[+-]?\\d+\\.?\\d*([eE][+-]?\\d+)?')
     str_ = pp.QuotedString('"', escChar='\\', unquoteResults=False, convertWhitespaceEscapes=False)
     literal = num | str_ | pp.Regex('true|false')
 
     ident = (~keywords + ppc.identifier.copy()).setName('ident')
-    type_ = ident.copy().setName('type')+pp.Optional(LBRACK+RBRACK)
+    type_ = ident.copy().setName('type') + pp.Optional(LBRACK + RBRACK)
     access = ident.copy().setName('access')
 
     add = pp.Forward()
@@ -66,7 +66,7 @@ def make_parser():
     call = ident + LPAR + pp.Optional(caller + pp.ZeroOrMore(COMMA + caller)) + RPAR
     new = NEW.suppress() + call
 
-    assign = ident + ASSIGN.suppress() + caller
+    assign = ident + ASSIGN.suppress() + expr
     var_inner = assign | ident
     vars_ = type_ + var_inner + pp.ZeroOrMore(COMMA + var_inner)
 
@@ -105,12 +105,12 @@ def make_parser():
     for_body = stmt | pp.Group(SEMI).setName('stmt_list')
     for_ = FOR.suppress() + LPAR + for_stmt_list + SEMI + for_cond + SEMI + for_stmt_list + RPAR + func_body
 
-
     stmt << (
             class_init
             | func
             | vars_ + SEMI
             | func_body
+            | simple_stmt + SEMI
     )
 
     func_stmt << (
@@ -138,22 +138,40 @@ def make_parser():
     program = pp.ZeroOrMore(class_init)
     start = program
 
-    def set_parse_action_magic(rule_name: str, parser_element: pp.ParserElement) -> None:
+    program = stmt_list.ignore(pp.cStyleComment).ignore(pp.dblSlashComment) + pp.StringEnd()
+
+    start = program
+
+    def set_parse_action_magic(rule_name: str, parser: pp.ParserElement) -> None:
         if rule_name == rule_name.upper():
             return
-        if getattr(parser_element, 'name', None) and parser_element.name.isidentifier():
-            rule_name = parser_element.name
-        cls = ''.join(x.capitalize() for x in rule_name.split('_')) + 'Node'
-        with suppress(NameError):
-            cls = eval(cls)
-            if not inspect.isabstract(cls):
-                def parse_action(s, loc, tocs):
-                    if cls is FuncNode:
-                        return FuncNode(tocs[0], tocs[1], tocs[2], tocs[3], tocs[4:-1], tocs[-1], loc=loc)
-                    else:
-                        return cls(*tocs, loc=loc)
+        if getattr(parser, 'name', None) and parser.name.isidentifier():
+            rule_name = parser.name
+        if rule_name in ('bin_op',):
+            def bin_op_parse_action(s, loc, tocs):
+                node = tocs[0]
+                if not isinstance(node, AstNode):
+                    node = bin_op_parse_action(s, loc, node)
+                for i in range(1, len(tocs) - 1, 2):
+                    secondNode = tocs[i + 1]
+                    if not isinstance(secondNode, AstNode):
+                        secondNode = bin_op_parse_action(s, loc, secondNode)
+                    node = BinOpNode(BinOp(tocs[i]), node, secondNode, loc=loc)
+                return node
 
-                parser_element.setParseAction(parse_action)
+            parser.setParseAction(bin_op_parse_action)
+        else:
+            cls = ''.join(x.capitalize() for x in rule_name.split('_')) + 'Node'
+            with suppress(NameError):
+                cls = eval(cls)
+                if not inspect.isabstract(cls):
+                    def parse_action(s, loc, tocs):
+                        if cls is FuncNode:
+                            return FuncNode(tocs[0], tocs[1], tocs[2], tocs[3], tocs[4:-1], tocs[-1], loc=loc)
+                        else:
+                            return cls(*tocs, loc=loc)
+
+                    parser.setParseAction(parse_action)
 
     for var_name, value in locals().copy().items():
         if isinstance(value, pp.ParserElement):
@@ -193,3 +211,4 @@ def parse(prog: str) -> StmtListNode:
         return prog
     finally:
         AstNode.init_action = old_init_action
+

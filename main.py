@@ -2,6 +2,7 @@ import os
 
 from compiler_demo import my_parser
 
+
 def main() -> None:
     test1 = '''private class A{
     {
@@ -85,24 +86,24 @@ public class Main {
             double multiply = a1 * a2;
             double division = a1 / a2;
             if (a1 > 1) {
+            int a = 2;
             } else {
+            int a = 3;
+            a=3 + 2;
             }
-            for (;;) {
+            for (int a = 2; a < 10; b=c+1) {
+            a = a + 1;
                 }
             int a = 2;
             return a;
         }
     }
-        public class Main {
-        public static void main(String[] args) {
-            OldClass.oldClassMethod(10, 20.5);
-        }
 '''
     test4 = '''
     public class Main {
         int a = 1;
     }'''
-    prog = my_parser.parse(test4)
+    prog = my_parser.parse(test3)
     ast_tree = prog.tree
 
     print(*ast_tree, sep=os.linesep)

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from contextlib import suppress
 from typing import Optional, Union, Tuple, Callable
 
-from .semantic import TypeDesc, IdentDesc, AccessType
+from .semantic import TypeDesc, IdentDesc, AccessType, BinOp
 
 TYPES = {"int": "Integer", "float": "Float", "double": "Double", "boolean": "Boolean", "short": "Short", "char": "Char",
          "long": "Long", "byte": "Byte"}
@@ -160,25 +160,6 @@ class CallNode(ExprNode):
     @property
     def childs(self) -> Tuple[AstNode, ...]:
         return self.func, _GroupNode('params', *self.params)
-
-
-class CallerNode(ExprNode):
-    """Класс для представления в AST-дереве вызова функций
-       (в языке программирования может быть как expression, так и statement)
-    """
-
-    def __init__(self, func: IdentNode, *params: ExprNode,
-                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
-        super().__init__(row=row, col=col, **props)
-        self.func = func
-        self.params = params
-
-    def __str__(self) -> str:
-        return 'call'
-
-    @property
-    def childs(self) -> Tuple[IdentNode, ...]:
-        return (self.func, *self.params)
 
 
 class StmtNode(ExprNode, ABC):
@@ -411,6 +392,24 @@ class ClassInitNode(StmtNode):
     @property
     def childs(self) -> Tuple[AstNode, ...]:
         return _GroupNode(str(self.access), self.name), self.body
+
+class BinOpNode(ExprNode):
+    """Класс для представления в AST-дереве бинарных операций
+    """
+
+    def __init__(self, op: BinOp, arg1: ExprNode, arg2: ExprNode,
+                 row: Optional[int] = None, col: Optional[int] = None, **props) -> None:
+        super().__init__(row=row, col=col, **props)
+        self.op = op
+        self.arg1 = arg1
+        self.arg2 = arg2
+
+    def __str__(self) -> str:
+        return str(self.op.value)
+
+    @property
+    def childs(self) -> Tuple[ExprNode, ExprNode]:
+        return self.arg1, self.arg2
 
 
 empty_statement_list = StmtListNode()
